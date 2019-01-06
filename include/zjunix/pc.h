@@ -2,126 +2,139 @@
 #define _ZJUNIX_PC_H
 
 #include <zjunix/list.h>
-#include <zjunix/pid.h>
 #include <zjunix/vm.h>
 #include <zjunix/fs/fat.h>
+#include <arch.h>
+#include <intr.h>
+#include <zjunix/syscall.h>
+#include <zjunix/utils.h>
+#include <zjunix/log.h>
+#include <zjunix/slab.h>
+#include <driver/vga.h>
+#include <driver/ps2.h>
+#include <zjunix/vfs/vfs.h>
+#include <page.h>
 
 #define  KERNEL_STACK_SIZE  4096
-#define  TASK_NAME_LEN   32
+#define  PC_NAME_LEN   32
 
-//进程状态
-#define  S_UNINIT    0
-#define  S_READY    1
-#define  S_RUNNING  2
-//#define  S_WAITING  3
-#define  S_TERMINAL 4
+#define P_INIT 1
+#define P_READY 2
+#define P_RUNNING 3
+#define P_END 4
 
-//进程时间片信息
-#define  CNT_LV0    0xffffffff
-#define  CNT_BASE   500
+#define MAX_LEVEL 64
+#define IDLE_ID MAX_LEVEL - 1
+#define SHELL_ID MAX_LEVEL
 
-//调度链表信息
-#define  SCHED_LV0   0  //forward process
-#define  SCHED_LV1   1
-#define  SCHED_LV2   2
-#define  SCHED_LV3   3
-#define  SCHED_LV_RANGE  3   
-#define  SCHED_LV_MAX  SCHED_LV_RANGE
-#define  SCHED_LV_MIN  1
+typedef unsigned char u_byte;
+typedef unsigned short u_short;
+typedef unsigned int u_int;
+typedef unsigned long long u_long;
 
+typedef struct context_struct
+{
+	unsigned int epc;
+	unsigned int at;
+	unsigned int v0, v1;
+	unsigned int a0, a1, a2, a3;
+	unsigned int t0, t1, t2, t3, t4, t5, t6, t7;
+	unsigned int s0, s1, s2, s3, s4, s5, s6, s7;
+	unsigned int t8, t9;
+	unsigned int hi, lo;
+	unsigned int gp, sp, fp, ra;
+}context;
 
-//寄存器信息结构，主要用于进程调度时的进程切换
-struct regs_context {
-    unsigned int epc;
-    unsigned int at;
-    unsigned int v0, v1;
-    unsigned int a0, a1, a2, a3;
-    unsigned int t0, t1, t2, t3, t4, t5, t6, t7;
-    unsigned int s0, s1, s2, s3, s4, s5, s6, s7;
-    unsigned int t8, t9;
-    unsigned int hi, lo;
-    unsigned int gp, sp, fp, ra;
+typedef struct list_head list;
+
+typedef struct pc_struct
+{
+	u_byte id;
+	u_byte parent_id;
+	unsigned char name[PC_NAME_LEN];
+	int address_id;
+	int state;
+
+	u_byte prio;
+	u_byte high3;
+	u_byte low3;
+
+	context context;
+	struct mm_struct *mm;
+	FILE *pc_files;
+	list node;
+}pc;
+
+typedef union pc_union
+{
+	pc pc;
+	unsigned char kernel_stack[KERNEL_STACK_SIZE];
+}pc_union;
+
+//找出这个8位数最低位的1在哪一位
+const u_byte where_lowest1_table_for_8[256] =
+{
+	0u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x00 to 0x0F                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x10 to 0x1F                   */
+	5u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x20 to 0x2F                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x30 to 0x3F                   */
+	6u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x40 to 0x4F                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x50 to 0x5F                   */
+	5u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x60 to 0x6F                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x70 to 0x7F                   */
+	7u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x80 to 0x8F                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x90 to 0x9F                   */
+	5u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0xA0 to 0xAF                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0xB0 to 0xBF                   */
+	6u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0xC0 to 0xCF                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0xD0 to 0xDF                   */
+	5u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0xE0 to 0xEF                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u  /* 0xF0 to 0xFF                   */
 };
 
+const u_byte only_indexbit_is1_table_for_3[8] =
+{
+	1, 2, 4, 8, 16, 32, 64, 128
+};//三位数为几，对应的那一位就置1
 
-struct task_struct {
-    pid_t pid;              //进程pid号
-    unsigned char name[TASK_NAME_LEN];  //进程名
-    pid_t parent;           //父进程pid号
-    int ASID;               //进程地址空间id号
-    int state;              //进程状态
+list wait_list;
+pc_union *cur_pc;
+pc_union *all_pcs[MAX_LEVEL];
+pc_union *shell;
+void wait_for_newpc(u_byte id);
 
-    unsigned int time_cnt;  //进程所拥有的时间片
-    unsigned int sched_lv;  //用于多级反馈队列调度算法,当前为第几级队列   
-
-    struct regs_context context;    //进程寄存器信息
-    struct mm_struct *mm;           //进程地址空间结构指针
-    FILE *task_files;               //进程打开文件指针
-
-    struct list_head sched;         //用于进程调度
-    struct list_head node;          //用于进程链表
-};
-
-union task_union {
-    struct task_struct task;        //进程控制块
-    unsigned char kernel_stack[KERNEL_STACK_SIZE];  //进程的内核栈
-};
-
-
-typedef struct regs_context context;
-
-extern struct list_head tasks;
-extern struct list_head sched;
-extern struct list_head sched_back[SCHED_LV_RANGE + 1];
-extern struct task_struct *current_task;
-
-void task_files_delete(struct task_struct* task);
-void remove_sched(struct task_struct *task);
-void remove_task(struct task_struct *task);
-void remove_exited(struct task_struct *task);
-
-
-void add_sched(struct task_struct *task);
-void add_sched_back(struct task_struct *task, int index);
-void add_task(struct task_struct *task);
-void add_exited(struct task_struct *task);
-
-struct task_struct* find_in_tasks(pid_t pid);
-struct task_struct* find_in_sched(pid_t pid);
-
-int task_create(char *task_name, void(*entry)(unsigned int argc, void *args), 
-                unsigned int argc, void *args, pid_t *retpid, int is_user);
-int runprog(unsigned int argc, void *args);
-static void copy_context(context* src, context* dest);
-int exec_from_kernel(unsigned int argc, void *args, int is_wait, int is_user);
+u_byte ready_table[MAX_LEVEL / 8];
+u_byte ready_group;
 
 void init_pc();
-void init_pc_list();
-void pc_schedule(unsigned int status, unsigned int cause, context* pt_context);
-int pc_kill(pid_t pid);
-
-void waitpid(pid_t pid);
-void add_wait(struct task_struct *task);
-void wakeup_parent();
+void idle();
+int exec_from_kernel(u_int argc, void *args, int wait, u_byte new_id, int user, int test);
+int create_pc(char *name, u_byte new_id, void(*entry)(u_int argc, void *args), u_int argc, void *args, int user);
+int kill_pc(u_byte kill_id);
+void activate_mm(pc* pc);
+void pc_files_delete(pc* pc);
+void print_all_pcs();
 void print_wait();
-
-
-/**************tlb****************/
-void activate_mm(struct task_struct* task);
-int runuserprog(char* progname);
-int vmprog(unsigned int argc, void* args);
-extern void enter_new_pc(unsigned int entry, unsigned int stack);
-
-void pc_exit(int state);
-struct task_struct* find_next_task();
-struct task_struct* find_in_sched_back();
-extern void switch_ex(struct regs_context* regs);
-extern void switch_wa(struct regs_context* des, struct regs_context* src);
-void clear_exited();
-
-void print_exited();
-void print_sched();     
-void print_task();
-void print_struct_task(struct task_struct* task);
+int entry(unsigned int argc, void *args);
+void wait(u_byte id);
+void end_pc();
+void pc_schedule(int state, int cause, context *pt_context);
+int cal_prio(pc *target, u_byte prio);
+void turn_to_ready(pc* target);
+void turn_to_unready(pc* target, int state);
+pc_union *find_next();
+pc_union *find_by_id(u_byte id);
+void change_prio(pc_union *target, int new_prio);
+static void copy_context(context* src, context* dest);
 
 #endif  // !_ZJUNIX_PC_H
+
+////volatile:不会被优化掉
+//mfc：从后面读出来，存到前面的寄存器里
+//mtc：从前面读出来，存到后面的寄存器里
+//asm语句，用%0 %1代表外界变量
+//=r代表将括号里的变量写入占位符
+//r代表将寄存器值读入括号里的变量
+
+//控制台进程
+//idle进程优先级最低 没的跑就跑idle

@@ -1,3 +1,3 @@
-OBJS := pid.o page.o pc.o switch_ex.o enter_user_pc.o
+OBJS := page.o pc.o
 
 include $(SUB_MAKE_INCLUDE)

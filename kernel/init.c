@@ -20,11 +20,11 @@
 void machine_info() {
     int row;
     int col;
-    kernel_printf("\n%s\n", "412-UNIX V1.0");
+    kernel_printf("\n%s\n", "Windows X");
     row = cursor_row;
     col = cursor_col;
     cursor_row = 29;
-    kernel_printf("%s", "Created by Dorm 412 Block 32, Yuquan Campus, Zhejiang University.");
+    kernel_printf("%s", "Created by.");
     cursor_row = row;
     cursor_col = col;
     kernel_set_cursor();
@@ -32,14 +32,16 @@ void machine_info() {
 
 #pragma GCC push_options
 #pragma GCC optimize("O0")
-void create_startup_process() {
-    int res;
-
-    res =  task_create("kernel_shell", (void*)ps, 0, 0, 0, 0);
-    if (res != 0)
-        kernel_printf("create startup process failed!\n");
-    else
-        kernel_printf("kernel shell created!\n");
+void create_startup_process() 
+{
+	if (create_pc("shell", SHELL_PRIO, (void*)ps, 0, 0, 0))
+	{
+		kernel_printf("Create startup process failed!\n");
+	}
+	else
+	{
+		kernel_printf("Shell create success!\n");
+	}
 }
 #pragma GCC pop_options
 
@@ -82,9 +84,6 @@ void init_kernel() {
     log(LOG_END, "System Calls.");
 
     // Process control
-    log(LOG_START, "PID Module.");
-    init_pid();
-    log(LOG_END, "PID Module.");
     log(LOG_START, "Process Control Module.");
     init_pc();
     create_startup_process();
