@@ -8,7 +8,6 @@
 
 extern struct cache * pcache;
 
-// 虚拟文件系统读接口
 u32 vfs_read(struct file *file, char *buf, u32 count, u32 *pos) {
 	u32 ret;
 
@@ -22,7 +21,6 @@ u32 vfs_read(struct file *file, char *buf, u32 count, u32 *pos) {
 	return ret;
 }
 
-// 虚拟文件系统写接口
 u32 vfs_write(struct file *file, char *buf, u32 count, u32 *pos) {
 	u32 ret;
 
@@ -35,7 +33,6 @@ u32 vfs_write(struct file *file, char *buf, u32 count, u32 *pos) {
     return ret;
 }
 
-// 通用读文件方法
 u32 generic_file_read(struct file *file, u8 *buf, u32 count, u32 *ppos){
 
     u32 pos;
@@ -57,12 +54,10 @@ u32 generic_file_read(struct file *file, u8 *buf, u32 count, u32 *ppos){
     inode = file->f_dentry->d_inode;
     mapping = &(inode->i_data);
 
-    // 计算其实页号、页偏移
     pos = *ppos;
     blksize = inode->i_blksize;
     startPageNo = pos / blksize;
     startPageCur = pos % blksize;
-    // endPage 这一页是不包含的
     if (pos + count < inode->i_size){
         endPageNo = ( pos + count ) / blksize;
         endPageCur = ( pos + count ) % blksize;
@@ -72,17 +67,14 @@ u32 generic_file_read(struct file *file, u8 *buf, u32 count, u32 *ppos){
         endPageCur = inode->i_size % blksize;
     }
 
-    // 读取每一文件页
     cur = 0;
     for ( pageNo = startPageNo; pageNo <= endPageNo; pageNo ++){
-        r_page = mapping->a_op->bmap(inode, pageNo);                // 文件页地址到相对物理页地址
+        r_page = mapping->a_op->bmap(inode, pageNo);           
 
-        // 先在页高速缓存中找到缓存请求数据的 page
         cond.cond1 = (void*)(&r_page);
         cond.cond2 = (void*)(file->f_dentry->d_inode);
         curPage = (struct vfs_page *) pcache->c_op->look_up(pcache, &cond);
 
-        // 如果该页不在高速缓存，向外存发出添页请求，并把该页添加进页高速缓存
         if ( curPage == 0 ){
             curPage = (struct vfs_page *) kmalloc ( sizeof(struct vfs_page) );
             if (!curPage)
@@ -104,7 +96,6 @@ u32 generic_file_read(struct file *file, u8 *buf, u32 count, u32 *ppos){
             list_add(&(curPage->p_list), &(mapping->a_cache));
         }
 
-        // 拷贝数据
         if ( pageNo == startPageNo ){
             if ( startPageNo == endPageNo ){
                 readCount = endPageCur - startPageCur;
@@ -128,13 +119,11 @@ u32 generic_file_read(struct file *file, u8 *buf, u32 count, u32 *ppos){
         *ppos += readCount;
     }
 
-    // cur既是当前buf的光标地址，也代表已经读了多少个字节
 out:
     file->f_pos = *ppos;
     return cur;
 }
 
-// 通用写文件方法
 u32 generic_file_write(struct file *file, u8 *buf, u32 count, u32 *ppos){
     u32 pos;
     u32 start;
@@ -156,26 +145,23 @@ u32 generic_file_write(struct file *file, u8 *buf, u32 count, u32 *ppos){
     inode = file->f_dentry->d_inode;
     mapping = &(inode->i_data);
 
-    // 计算其实页号、页偏移
     pos = *ppos;
     blksize = inode->i_blksize;
     startPageNo = pos / blksize;
     startPageCur = pos % blksize;
-    // endPage 这一页是不包含的
+ 
     endPageNo = ( pos + count ) / blksize;
     endPageCur = ( pos + count ) % blksize;
 
-    // 读取每一文件页
+    
     cur = 0;
     for ( pageNo = startPageNo; pageNo <= endPageNo; pageNo ++){
-        r_page = mapping->a_op->bmap(inode, pageNo);                // 文件页地址到相对物理页地址
+        r_page = mapping->a_op->bmap(inode, pageNo);               
 
-        // 先在页高速缓存中找到缓存请求数据的 page
         cond.cond1 = (void*)(&r_page);
         cond.cond2 = (void*)(file->f_dentry->d_inode);
         curPage = (struct vfs_page *) pcache->c_op->look_up(pcache, &cond);
 
-        // 如果该页不在高速缓存，向外存发出添页请求，并把该页添加进页高速缓存
         if ( curPage == 0 ){
             curPage = (struct vfs_page *) kmalloc ( sizeof(struct vfs_page) );
             if (!curPage)
@@ -197,7 +183,6 @@ u32 generic_file_write(struct file *file, u8 *buf, u32 count, u32 *ppos){
             list_add(&(curPage->p_list), &(mapping->a_cache));
         }
 
-        // 拷贝数据
         if ( pageNo == startPageNo ){
             if ( startPageNo == endPageNo ){
                 writeCount = endPageCur - startPageCur;
@@ -217,7 +202,6 @@ u32 generic_file_write(struct file *file, u8 *buf, u32 count, u32 *ppos){
             kernel_memcpy(curPage->p_data, buf + cur, writeCount);
         }
 
-        // 最后写回内存
         mapping->a_op->writepage(curPage);
         
         cur += writeCount;
@@ -225,20 +209,17 @@ u32 generic_file_write(struct file *file, u8 *buf, u32 count, u32 *ppos){
 
     }
 
-    // 最后改变文件大小
     if (pos + count > inode->i_size) {
         inode->i_size = pos + count;
         parent = file->f_dentry->d_parent;
         inode->i_sb->s_op->write_inode(inode, parent);
     }
 
-    // cur既是当前buf的光标地址，也代表已经写了多少个字节
 out:
     file->f_pos = *ppos;
     return cur;
 }
 
-// 通用冲洗方法
 u32 generic_file_flush(struct file * file){
 
     struct vfs_page *page;
@@ -251,7 +232,6 @@ u32 generic_file_flush(struct file * file){
     begin = &(mapping->a_cache);
     a = begin->next;
 
-    // 把文件关联的已缓冲页逐页写回
     while ( a != begin ){
         page = container_of(a, struct vfs_page, p_list);
         if ( page->p_state & P_DIRTY ){
