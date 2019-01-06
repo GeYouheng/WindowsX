@@ -36,12 +36,12 @@ void tlb_refill(unsigned int bad_addr) {
     kernel_printf("tlb_refill: bad_addr = %x    entry_hi = %x \n", bad_addr, entry_hi_test);
     kernel_printf("%x  %d\n", current_task, current_task->pid);
    #endif
-    if (current_task->mm == 0) {
-        kernel_printf("tlb_refill: mm is null!!!  %d\n", current_task->pid);
+    if (cur_pc->pc.mm == 0) {
+        kernel_printf("tlb_refill: mm is null!!!  %d\n", cur_pc->pc.id);
         goto error_0;
     }
 
-    pgd = current_task->mm->pgd;
+    pgd = cur_pc->pc.mm->pgd;
     if (pgd == 0) {
         kernel_printf("tlb_refill: pgd == NULL\n");
         goto error_0;
@@ -147,7 +147,7 @@ void tlb_refill(unsigned int bad_addr) {
     entry_lo1 |= 0x06;
 
     entry_hi = (bad_addr & PAGE_MASK) & (~(1 << PAGE_SHIFT));
-    entry_hi |= current_task->ASID;
+    entry_hi |= cur_pc->pc.address_id;
     
     #ifdef TLB_DEBUG
         kernel_printf("pid: %d\n", current_task->pid);
@@ -175,7 +175,7 @@ void tlb_refill(unsigned int bad_addr) {
 
 
     kernel_printf("after refill\n");
-    unsigned int* pgd_ = current_task->mm->pgd;
+    unsigned int* pgd_ = cur_pc->pc.mm->pgd;
     unsigned int pde_, pte_;
     unsigned int* pde_ptr_;
     int i, j;
@@ -232,13 +232,13 @@ void do_exceptions(unsigned int status, unsigned int cause, context* pt_context,
     if (exceptions[index]) {
         exceptions[index](status, cause, pt_context);
     } else {
-        struct task_struct* pcb;
+        pc_union* pcb;
         unsigned int badVaddr;
         asm volatile("mfc0 %0, $8\n\t" : "=r"(badVaddr));
         //modified by Ice
-        pcb = current_task;
-        kernel_printf("\nProcess %s exited due to exception cause=%x;\n", pcb->name, cause);
-        kernel_printf("status=%x, EPC=%x, BadVaddr=%x\n", status, pcb->context.epc, badVaddr);
+        pcb = cur_pc;
+        kernel_printf("\nProcess %s exited due to exception cause=%x;\n", pcb->pc.name, cause);
+        kernel_printf("status=%x, EPC=%x, BadVaddr=%x\n", status, pcb->pc.context.epc, badVaddr);
     //    pc_kill_syscall(status, cause, pt_context);
             //Done by Ice
         while (1)

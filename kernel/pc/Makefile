@@ -1,3 +1,3 @@
-OBJS := page.o pc.o
+OBJS := page.o pc.o 
 
 include $(SUB_MAKE_INCLUDE)
