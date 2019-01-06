@@ -2,6 +2,12 @@
 #define _ZJUNIX_VFS_FAT32_H
 
 #include <zjunix/vfs/vfs.h>
+#include <zjunix/vfs/vfscache.h>
+
+#include <zjunix/log.h>
+#include <zjunix/slab.h>
+#include <driver/vga.h>
+#include <zjunix/utils.h>
 
 #define MAX_FAT32_SHORT_FILE_NAME_BASE_LEN      8
 #define MAX_FAT32_SHORT_FILE_NAME_EXT_LEN       3
@@ -15,65 +21,122 @@
 #define FAT32_NAME_SPECIFIC_TO_NORMAL           1
 #define INF                                     10000
 
-// FAT32 文件系统信息汇总
+extern struct dentry                    * root_dentry;              // vfs.c
+extern struct dentry                    * pwd_dentry;
+extern struct vfsmount                  * root_mnt;
+extern struct vfsmount                  * pwd_mnt;
+
+extern struct cache                     * dcache;                   // vfscache.c
+extern struct cache                     * pcache;
+extern struct cache                     * icache;
+
+struct vfs_page * tempp;
+
 struct fat32_basic_information {
-    struct fat32_dos_boot_record* fa_DBR;               // DBR 扇区信息
-    struct fat32_file_system_information* fa_FSINFO;    // FSINFO 辅助信息
-    struct fat32_file_allocation_table* fa_FAT;         // FAT 文件分配表
+    struct fat32_dos_boot_record* fa_DBR;               
+    struct fat32_file_system_information* fa_FSINFO;    
+    struct fat32_file_allocation_table* fa_FAT;        
 };
 
-// FAT32 DBR扇区信息
 struct fat32_dos_boot_record {
-    u32 base;                                           // 基地址（绝对扇区地址）
-    u32 reserved;                                       // 保留扇区（文件分配表之前）
-    u32 fat_num;                                        // 文件分配表的个数
-    u32 fat_size;                                       // 一张文件分配表所占的扇区数
-    u32 root_clu;                                       // 根目录起始所在簇号（算上0号和1号簇），
-    u32 sec_per_clu;                                    // 每一簇的扇区数
-    u8 data[SECTOR_SIZE];                               // 数据
+    u32 base;                                           
+    u32 reserved;                                       
+    u32 fat_num;                                    
+    u32 fat_size;                                       
+    u32 root_clu;                                       
+    u32 sec_per_clu;                                 
+    u8 data[SECTOR_SIZE];                           
 };
 
-// FSINFO 文件系统信息
 struct fat32_file_system_information {
-    u32 base;                                           // 基地址（绝对扇区地址）
-    u8 data[SECTOR_SIZE];                               // 数据
+    u32 base;                                           
+    u8 data[SECTOR_SIZE];                               
 };
 
-// FAT 文件分配表汇总
 struct fat32_file_allocation_table {
-    u32 base;                                           // 基地址（绝对扇区地址）
-    u32 data_sec;                                       // （FAT表无关）数据区起始位置的绝对扇区(方便)
-    u32 root_sec;                                       // （FAT表无关）根目录内容所在绝对扇区（方便）
+    u32 base;                                           
+    u32 data_sec;                                       
+    u32 root_sec;                                    
 };
 
-// 文件分配表（忽略长文件名文件）
 struct __attribute__((__packed__)) fat_dir_entry {
-    u8 name[MAX_FAT32_SHORT_FILE_NAME_LEN];             // 文件名(含拓展名)
-    u8 attr;                                            // 属性
-    u8 lcase;                                           // 系统保留
-    u8 ctime_cs;                                        // 创建时间的10毫秒位
-    u16 ctime;                                          // 创建时间
-    u16 cdate;                                          // 创建日期
-    u16 adate;                                          // 最后访问日期
-    u16 starthi;                                        // 文件起始簇（相对物理帧）的高16位
-    u16 time;                                           // 文件最后修改时间
-    u16 date;                                           // 文件最后修改日期
-    u16 startlo;                                        // 文件起始簇（相对物理帧）的低16位
-    u32 size;                                           // 文件长度（字节）
+    u8 name[MAX_FAT32_SHORT_FILE_NAME_LEN];             
+    u8 attr;                                            
+    u8 lcase;                                          
+    u8 ctime_cs;                                      
+    u16 ctime;                                      
+    u16 cdate;                                         
+    u16 adate;                                        
+    u16 starthi;                                       
+    u16 time;                                        
+    u16 date;                                       
+    u16 startlo;                                      
+    u32 size;                                         
 };
 
-// 下面是函数声明
-// fat32.c
-u32 init_fat32(u32);
-u32 fat32_delete_inode(struct dentry *);
-u32 fat32_write_inode(struct inode *, struct dentry *);
-struct dentry* fat32_inode_lookup(struct inode *, struct dentry *, struct nameidata *);
-u32 fat32_create(struct inode *, struct dentry *, u32 mode, struct nameidata *);
-u32 fat32_readdir(struct file *, struct getdent *);
-void fat32_convert_filename(struct qstr*, const struct qstr*, u8, u32);
-u32 fat32_readpage(struct vfs_page *);
-u32 fat32_writepage(struct vfs_page *);
-u32 fat32_bmap(struct inode *, u32);
-u32 read_fat(struct inode *, u32);
+struct super_operations fat32_super_operations = {
+    .delete_inode   = fat32_delete_inode,
+    .write_inode    = fat32_write_inode,
+};
 
-#endif
+struct inode_operations fat32_inode_operations[2] = {
+    {
+        .lookup = fat32_inode_lookup,
+        .create = fat32_create,
+    },
+    {
+        .create = fat32_create,
+    }
+};
+
+struct dentry_operations fat32_dentry_operations = {
+    .compare    = generic_compare_filename,
+};
+
+struct file_operations fat32_file_operations = {
+    .read		= generic_file_read,
+    .write      = generic_file_write,
+    .flush      = generic_file_flush,
+    .readdir    = fat32_readdir,
+};
+
+struct address_space_operations fat32_address_space_operations = {
+    .writepage  = fat32_writepage,
+    .readpage   = fat32_readpage,
+    .bmap       = fat32_bmap,
+};
+
+u32 init_fat32(u32 base);
+u32 fat32_delete_inode(struct dentry *dentry);
+u32 fat32_write_inode(struct inode * inode, struct dentry * parent);
+struct dentry* fat32_inode_lookup(struct inode *dir, struct dentry *dentry, struct nameidata *nd);
+u32 fat32_create(struct inode *dir, struct dentry *dentry, u32 mode, struct nameidata *nd);
+u32 fat32_readdir(struct file * file, struct getdent * getdent);
+void fat32_convert_filename(struct qstr* dest, const struct qstr* src, u8 mode, u32 direction);
+u32 fat32_readpage(struct vfs_page *page);
+u32 fat32_writepage(struct vfs_page *page);
+u32 fat32_bmap(struct inode* inode, u32 pageNo);
+u32 read_fat(struct inode* inode, u32 index);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
