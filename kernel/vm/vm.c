@@ -136,7 +136,7 @@ struct vma_struct* find_vma_and_prev(struct mm_struct* mm, unsigned long addr, s
 unsigned long get_unmapped_area(unsigned long addr, unsigned long len, unsigned long flags)
 {
     struct vma_struct* vma;
-    struct mm_struct* mm = current_task->mm;         //全局变量，当前线程对应的task_struct
+    struct mm_struct* mm = cur_pc->pc.mm;         //全局变量，当前线程对应的task_struct
 
     addr = UPPER_ALLIGN(addr, PAGE_SIZE);   // Allign to page size
     if (addr+len > KERNEL_ENTRY) return -1;
@@ -191,7 +191,7 @@ void insert_vma_struct(struct mm_struct* mm, struct vma_struct* area)
 // Mapping a region
 unsigned long do_map(unsigned long addr, unsigned long len, unsigned long flags)
 {
-    struct mm_struct* mm = current_task->mm;
+    struct mm_struct* mm = cur_pc->pc.mm;
     struct vma_struct *vma, *prev;
     if (!len) return addr;
     addr = get_unmapped_area(addr, len, flags);
@@ -211,7 +211,7 @@ unsigned long do_map(unsigned long addr, unsigned long len, unsigned long flags)
 
 int do_unmap(unsigned long addr, unsigned long len)
 {
-    struct mm_struct* mm = current_task->mm;
+    struct mm_struct* mm = cur_pc->pc.mm;
     struct vma_struct *vma, *prev;
     if (addr>KERNEL_ENTRY || len+addr>KERNEL_ENTRY) return -1;  // Bad addr
     vma = find_vma_and_prev(mm, addr, &prev);
@@ -267,7 +267,7 @@ void exit_mmap(struct mm_struct* mm)
 
 int is_in_vma(unsigned long addr)
 {
-    struct mm_struct* mm = current_task->mm;
+    struct mm_struct* mm = cur_pc->pc.mm;
     struct vma_struct *vma = find_vma(mm, addr);
     if (!vma || vma->vm_start>addr) return 0;
     else return 1;
