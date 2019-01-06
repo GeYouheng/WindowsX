@@ -2,18 +2,8 @@
 #define _ZJUNIX_PC_H
 
 #include <zjunix/list.h>
-#include <zjunix/vm.h>
-#include <zjunix/fs/fat.h>
-#include <arch.h>
-#include <intr.h>
-#include <zjunix/syscall.h>
-#include <zjunix/utils.h>
-#include <zjunix/log.h>
-#include <zjunix/slab.h>
-#include <driver/vga.h>
-#include <driver/ps2.h>
 #include <zjunix/vfs/vfs.h>
-#include <page.h>
+#include <zjunix/fs/fat.h>
 
 #define  KERNEL_STACK_SIZE  4096
 #define  PC_NAME_LEN   32
@@ -32,7 +22,7 @@ typedef unsigned short u_short;
 typedef unsigned int u_int;
 typedef unsigned long long u_long;
 
-typedef struct context_struct
+typedef struct
 {
 	unsigned int epc;
 	unsigned int at;
@@ -47,7 +37,7 @@ typedef struct context_struct
 
 typedef struct list_head list;
 
-typedef struct pc_struct
+typedef struct
 {
 	u_byte id;
 	u_byte parent_id;
@@ -65,47 +55,24 @@ typedef struct pc_struct
 	list node;
 }pc;
 
-typedef union pc_union
+typedef union
 {
 	pc pc;
 	unsigned char kernel_stack[KERNEL_STACK_SIZE];
 }pc_union;
 
 //找出这个8位数最低位的1在哪一位
-const u_byte where_lowest1_table_for_8[256] =
-{
-	0u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x00 to 0x0F                   */
-	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x10 to 0x1F                   */
-	5u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x20 to 0x2F                   */
-	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x30 to 0x3F                   */
-	6u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x40 to 0x4F                   */
-	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x50 to 0x5F                   */
-	5u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x60 to 0x6F                   */
-	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x70 to 0x7F                   */
-	7u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x80 to 0x8F                   */
-	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x90 to 0x9F                   */
-	5u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0xA0 to 0xAF                   */
-	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0xB0 to 0xBF                   */
-	6u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0xC0 to 0xCF                   */
-	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0xD0 to 0xDF                   */
-	5u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0xE0 to 0xEF                   */
-	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u  /* 0xF0 to 0xFF                   */
-};
+extern const u_byte where_lowest1_table_for_8[256];
+extern const u_byte only_indexbit_is1_table_for_3[8];
+extern list wait_list;
+extern pc_union *cur_pc;
+extern pc_union *all_pcs[MAX_LEVEL];
+extern pc_union *shell;
 
-const u_byte only_indexbit_is1_table_for_3[8] =
-{
-	1, 2, 4, 8, 16, 32, 64, 128
-};//三位数为几，对应的那一位就置1
+extern u_byte ready_table[MAX_LEVEL / 8];
+extern u_byte ready_group;
 
-list wait_list;
-pc_union *cur_pc;
-pc_union *all_pcs[MAX_LEVEL];
-pc_union *shell;
 void wait_for_newpc(u_byte id);
-
-u_byte ready_table[MAX_LEVEL / 8];
-u_byte ready_group;
-
 void init_pc();
 void idle();
 int exec_from_kernel(u_int argc, void *args, int wait, u_byte new_id, int user, int test);
@@ -116,9 +83,8 @@ void pc_files_delete(pc* pc);
 void print_all_pcs();
 void print_wait();
 int entry(unsigned int argc, void *args);
-void wait(u_byte id);
 void end_pc();
-void pc_schedule(int state, int cause, context *pt_context);
+void pc_schedule(unsigned int state, unsigned int cause, context *pt_context);
 int cal_prio(pc *target, u_byte prio);
 void turn_to_ready(pc* target);
 void turn_to_unready(pc* target, int state);

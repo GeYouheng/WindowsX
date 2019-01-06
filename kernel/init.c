@@ -34,7 +34,7 @@ void machine_info() {
 #pragma GCC optimize("O0")
 void create_startup_process() 
 {
-	if (create_pc("shell", SHELL_PRIO, (void*)ps, 0, 0, 0))
+	if (create_pc("shell", SHELL_ID, (void*)ps, 0, 0, 0))
 	{
 		kernel_printf("Create startup process failed!\n");
 	}

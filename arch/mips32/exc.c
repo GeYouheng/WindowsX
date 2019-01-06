@@ -34,14 +34,14 @@ void tlb_refill(unsigned int bad_addr) {
         );
     
     kernel_printf("tlb_refill: bad_addr = %x    entry_hi = %x \n", bad_addr, entry_hi_test);
-    kernel_printf("%x  %d\n", current_task, current_task->pid);
+    kernel_printf("%x  %d\n", cur_pc, cur_pc->pc.id);
    #endif
     if (cur_pc->pc.mm == 0) {
         kernel_printf("tlb_refill: mm is null!!!  %d\n", cur_pc->pc.id);
         goto error_0;
     }
 
-    pgd = cur_pc->pc.mm->pgd;
+    pgd = cur_pc->pc.mm;
     if (pgd == 0) {
         kernel_printf("tlb_refill: pgd == NULL\n");
         goto error_0;
@@ -150,7 +150,7 @@ void tlb_refill(unsigned int bad_addr) {
     entry_hi |= cur_pc->pc.address_id;
     
     #ifdef TLB_DEBUG
-        kernel_printf("pid: %d\n", current_task->pid);
+        kernel_printf("pid: %d\n", cur_pc->pc.id);
         kernel_printf("tlb_refill: entry_hi: %x  entry_lo0: %x  entry_lo1: %x\n", entry_hi, entry_lo0, entry_lo1);
     #endif
 
@@ -175,7 +175,7 @@ void tlb_refill(unsigned int bad_addr) {
 
 
     kernel_printf("after refill\n");
-    unsigned int* pgd_ = cur_pc->pc.mm->pgd;
+    unsigned int* pgd_ = (cur_pc->pc.mm);
     unsigned int pde_, pte_;
     unsigned int* pde_ptr_;
     int i, j;

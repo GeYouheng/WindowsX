@@ -298,7 +298,7 @@ void parse_cmd()
     {
         int pid = param[0] - '0';
         kernel_printf("Killing process %d\n", pid);
-        result = pc_kill(pid);
+        result = kill_pc(pid);
         kernel_printf("Kill return with %d\n", result);
     } 
     else if (kernel_strcmp(ps_buffer, "execk8") == 0) 
@@ -320,7 +320,7 @@ void parse_cmd()
         result = exec_from_kernel(0, (void*)param, 1, 6, 0, 6);
         kernel_printf(ps_buffer, "execk3 return with %d\n",result);
     }
-        else if (kernel_strcmp(ps_buffer, "execk1") == 0) 
+    else if (kernel_strcmp(ps_buffer, "execk1") == 0) 
     {
         kernel_printf("Create task.\n");
         result = exec_from_kernel(0, (void*)param, 0, 1, 0, 1);
@@ -329,23 +329,23 @@ void parse_cmd()
     } 
 
 
-    else if (kernel_strcmp(ps_buffer, "vm") == 0) 
-    {
-        struct mm_struct* mm = mm_create();
-        kernel_printf("Create succeed. %x\n", mm);
-        mm_delete(mm);        
-    } 
+    // else if (kernel_strcmp(ps_buffer, "vm") == 0) 
+    // {
+    //     struct mm_struct* mm = mm_create();
+    //     kernel_printf("Create succeed. %x\n", mm);
+    //     mm_delete(mm);        
+    // } 
 
-    else if (kernel_strcmp(ps_buffer, "ey") == 0) 
-    {
-        result = exec_from_kernel(1, "/seg.bin", 0, 1);
-        kernel_printf(ps_buffer, "execk3 return with %d\n", result);
-    } 
-    else if (kernel_strcmp(ps_buffer, "es") == 0) 
-    {
-        result = exec_from_kernel(1, "/syscall.bin", 0, 1);
-        kernel_printf(ps_buffer, "execk3 return with %d\n", result);
-    } 
+    // else if (kernel_strcmp(ps_buffer, "ey") == 0) 
+    // {
+    //     result = exec_from_kernel(1, "/seg.bin", 0, 1);
+    //     kernel_printf(ps_buffer, "execk3 return with %d\n", result);
+    // } 
+    // else if (kernel_strcmp(ps_buffer, "es") == 0) 
+    // {
+    //     result = exec_from_kernel(1, "/syscall.bin", 0, 1);
+    //     kernel_printf(ps_buffer, "execk3 return with %d\n", result);
+    // } 
     else if (kernel_strcmp(ps_buffer, "tlb") == 0) 
     {
         // result = tlb_test();

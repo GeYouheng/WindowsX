@@ -1,9 +1,54 @@
+#include <zjunix/syscall.h>
+#include <intr.h>
+#include <driver/ps2.h>
+#include <zjunix/vm.h>
+#include <arch.h>
+#include <zjunix/utils.h>
+#include <zjunix/log.h>
+#include <zjunix/slab.h>
+#include <driver/vga.h>
+#include <page.h>
 # include "zjunix/pc.h"
 
 //初始化进程模块
 //将进程调度所用的bitmap全部初始化为0
 //初始化时没有当前执行进程，shell也未创建
 //然后创建idle进程，并进入进程调度。
+
+//找出这个8位数最低位的1在哪一位
+const u_byte where_lowest1_table_for_8[256] =
+{
+	0u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x00 to 0x0F                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x10 to 0x1F                   */
+	5u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x20 to 0x2F                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x30 to 0x3F                   */
+	6u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x40 to 0x4F                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x50 to 0x5F                   */
+	5u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x60 to 0x6F                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x70 to 0x7F                   */
+	7u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x80 to 0x8F                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x90 to 0x9F                   */
+	5u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0xA0 to 0xAF                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0xB0 to 0xBF                   */
+	6u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0xC0 to 0xCF                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0xD0 to 0xDF                   */
+	5u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0xE0 to 0xEF                   */
+	4u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u  /* 0xF0 to 0xFF                   */
+};
+
+const u_byte only_indexbit_is1_table_for_3[8] =
+{
+	1, 2, 4, 8, 16, 32, 64, 128
+};//三位数为几，对应的那一位就置1
+
+list wait_list;
+pc_union *cur_pc;
+pc_union *all_pcs[MAX_LEVEL];
+pc_union *shell;
+
+u_byte ready_table[MAX_LEVEL / 8];
+u_byte ready_group;
+
 void init_pc()
 {
 	ready_group = 0;
@@ -170,7 +215,7 @@ int kill_pc(u_byte kill_id)
 				}
 			}
 
-			turn_to_unready(kill_pc, P_END);
+			turn_to_unready(&(kill_pc->pc), P_END);
 			if (kill_pc->pc.pc_files != 0)
 			{
 				pc_files_delete(&(kill_pc->pc));
@@ -200,14 +245,14 @@ void activate_mm(pc* pc)
 {
 	// init_pgtable();
 	//在cp0中设置进程的ASID， 用于TLB匹配
-	set_tlb_asid(pc->address_id);
+	//set_tlb_asid(pc->address_id);
 }
 
 void pc_files_delete(pc* pc) 
 {
 	//可能有问题，不知道如何查看文件是否打开
-	fs_close(pc->pc_files);
-	kfree(&(pc->pc_files));
+	// fs_close(pc->pc_files);
+	// kfree(&(pc->pc_files));
 }
 
 void print_all_pcs()
@@ -274,7 +319,7 @@ int entry(unsigned int argc, void *args)
 	}
 }
 
-void wait(u_byte id)
+void wait_for_newpc(u_byte id)
 {
 	if (id < MAX_LEVEL)
 	{
@@ -282,7 +327,7 @@ void wait(u_byte id)
 		if (target && target->pc.state != P_END)
 		{
 			turn_to_unready(&(cur_pc->pc), -id);
-			list_add_tail(&(cur_pc->pc.node), &wait);
+			list_add_tail(&(cur_pc->pc.node), &wait_list);
 			asm volatile(
 			"li $v0, 5\n\t"
 			"syscall\n\t"
@@ -313,10 +358,10 @@ void end_pc()
 		kernel_printf("Idle process can not be exited!\n");
 		return;
 	}
-	turn_to_unready(cur_pc, P_END);
+	turn_to_unready(&(cur_pc->pc), P_END);
 	if(cur_pc->pc.pc_files != 0)
 	{
-		pc_files_delete(cur_pc->pc.pc_files);
+		pc_files_delete(&(cur_pc->pc));
 	}
 	if(cur_pc->pc.mm != 0)
 	{
@@ -330,7 +375,7 @@ void end_pc()
 		"nop\n\t");
 }
 
-void pc_schedule(int state, int cause, context *pt_context)
+void pc_schedule(unsigned int state, unsigned int cause, context *pt_context)
 {
 	static u_int TIME_SLOT = 0;
 	if ((cause >> (8 + 7) & 1) && !(TIME_SLOT % 5)) // 每5个时间片调用一次shell
@@ -352,7 +397,7 @@ void pc_schedule(int state, int cause, context *pt_context)
 		pc_union *next = find_next();
 		if (next->pc.mm != 0)
 		{//激活地址空间
-			activate_mm(next);
+			activate_mm(&(next->pc));
 		}
 		copy_context(pt_context, &(cur_pc->pc.context));
 		cur_pc = next;
